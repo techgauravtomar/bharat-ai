@@ -1,1 +1,1 @@
-image_path,caption,source,source_url,license,creator,attribution_required,commercial_use_allowed,consent_status,category,split
+image_id,image_path,caption_en,caption_hi,source,source_url,license,license_url,creator,attribution,commercial_use_allowed,legal_review,category,split,sha256,review_status

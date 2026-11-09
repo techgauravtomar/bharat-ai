@@ -1,85 +1,109 @@
 import csv
+import hashlib
 from pathlib import Path
 from PIL import Image
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CSV_FILE = PROJECT_ROOT / "dataset/metadata/dataset.csv"
+ROOT = Path(__file__).resolve().parents[2]
+CSV_FILE = ROOT / "dataset/metadata/dataset.csv"
 
-REQUIRED_FIELDS = [
-    "image_path",
-    "caption",
-    "source",
-    "source_url",
-    "license",
-    "commercial_use_allowed",
-    "category",
-    "split",
+REQUIRED = [
+    "image_id", "image_path", "caption_en",
+    "source", "source_url", "license", "license_url",
+    "commercial_use_allowed", "legal_review",
+    "category", "split", "sha256", "review_status"
 ]
 
-VALID_SPLITS = {"train", "validation", "test"}
+ALLOWED_LICENSES = {
+    "CC0-1.0",
+    "Public Domain",
+    "GODL-India",
+    "Direct Permission",
+}
 
-def validate():
+def calculate_hash(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+def main():
     if not CSV_FILE.exists():
-        print("ERROR: Dataset CSV not found.")
+        print("Dataset CSV not found.")
         return
 
     errors = []
-    valid_count = 0
+    seen_hashes = set()
+    valid = 0
 
-    with CSV_FILE.open("r", encoding="utf-8", newline="") as file:
-        reader = csv.DictReader(file)
+    with CSV_FILE.open(encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
 
-        missing = set(REQUIRED_FIELDS) - set(reader.fieldnames or [])
+        missing = set(REQUIRED) - set(reader.fieldnames or [])
         if missing:
-            print("Missing columns:", ", ".join(sorted(missing)))
+            print("Missing columns:", sorted(missing))
             return
 
-        for row_number, row in enumerate(reader, start=2):
+        for line, row in enumerate(reader, start=2):
             issues = []
 
-            for field in REQUIRED_FIELDS:
+            for field in REQUIRED:
                 if not (row.get(field) or "").strip():
                     issues.append(f"Missing {field}")
 
-            image_value = (row.get("image_path") or "").strip()
-            if image_value:
-                image_path = PROJECT_ROOT / image_value
+            path = ROOT / (row.get("image_path") or "")
 
-                if not image_path.is_file():
-                    issues.append("Image file not found")
-                else:
-                    try:
-                        with Image.open(image_path) as image:
-                            image.verify()
-                    except Exception:
-                        issues.append("Invalid or unreadable image")
+            if not path.is_file():
+                issues.append("Image file missing")
+            else:
+                try:
+                    with Image.open(path) as image:
+                        image.verify()
 
-            permission = (
-                row.get("commercial_use_allowed") or ""
-            ).strip().lower()
+                    actual_hash = calculate_hash(path)
+                    recorded_hash = row["sha256"].strip()
 
-            if permission != "yes":
-                issues.append(
-                    "Commercial-use permission not confirmed"
-                )
+                    if actual_hash != recorded_hash:
+                        issues.append("SHA256 mismatch")
 
-            split = (row.get("split") or "").strip().lower()
-            if split not in VALID_SPLITS:
-                issues.append("Invalid dataset split")
+                    if actual_hash in seen_hashes:
+                        issues.append("Duplicate image")
+
+                    seen_hashes.add(actual_hash)
+
+                except Exception:
+                    issues.append("Invalid image")
+
+            if row.get("license", "").strip() not in ALLOWED_LICENSES:
+                issues.append("License not allowlisted")
+
+            if row.get("commercial_use_allowed", "").lower() != "yes":
+                issues.append("Commercial use not approved")
+
+            if row.get("legal_review", "").lower() != "yes":
+                issues.append("Legal review pending")
+
+            if row.get("review_status", "").lower() != "approved":
+                issues.append("Caption review pending")
+
+            if row.get("split", "").lower() not in {
+                "train", "validation", "test"
+            }:
+                issues.append("Invalid split")
 
             if issues:
-                errors.append((row_number, issues))
+                errors.append((line, issues))
             else:
-                valid_count += 1
+                valid += 1
 
-    print(f"\nValid records: {valid_count}")
-    print(f"Records with errors: {len(errors)}")
+    print("\nValid records:", valid)
+    print("Records requiring correction:", len(errors))
 
-    for row_number, issues in errors:
-        print(f"Row {row_number}: {'; '.join(issues)}")
+    for line, issues in errors:
+        print(f"Row {line}: {'; '.join(issues)}")
 
     if not errors:
         print("Dataset validation successful.")
 
 if __name__ == "__main__":
-    validate()
+    main()
