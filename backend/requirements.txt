@@ -6,3 +6,7 @@ pillow
 numpy
 torch
 torchvision
+diffusers
+transformers
+accelerate
+safetensors

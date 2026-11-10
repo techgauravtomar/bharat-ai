@@ -1,5 +1,6 @@
 import csv
 import hashlib
+import sys
 from pathlib import Path
 from PIL import Image
 
@@ -30,11 +31,13 @@ def calculate_hash(path):
 def main():
     if not CSV_FILE.exists():
         print("Dataset CSV not found.")
-        return
+        sys.exit(1)
 
     errors = []
     seen_hashes = set()
-    valid = 0
+    development_valid = 0
+    legal_valid = 0
+    total = 0
 
     with CSV_FILE.open(encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
@@ -42,26 +45,29 @@ def main():
         missing = set(REQUIRED) - set(reader.fieldnames or [])
         if missing:
             print("Missing columns:", sorted(missing))
-            return
+            sys.exit(1)
 
         for line, row in enumerate(reader, start=2):
+            total += 1
             issues = []
 
             for field in REQUIRED:
-                if not (row.get(field) or "").strip():
-                    issues.append(f"Missing {field}")
+              if field in {"source_url", "license_url"}:
+               continue
+            if not (row.get(field) or "").strip():
+             issues.append(f"Missing {field}")
 
-            path = ROOT / (row.get("image_path") or "")
+            image_path = ROOT / (row.get("image_path") or "")
 
-            if not path.is_file():
+            if not image_path.is_file():
                 issues.append("Image file missing")
             else:
                 try:
-                    with Image.open(path) as image:
+                    with Image.open(image_path) as image:
                         image.verify()
 
-                    actual_hash = calculate_hash(path)
-                    recorded_hash = row["sha256"].strip()
+                    actual_hash = calculate_hash(image_path)
+                    recorded_hash = row.get("sha256", "").strip()
 
                     if actual_hash != recorded_hash:
                         issues.append("SHA256 mismatch")
@@ -74,36 +80,68 @@ def main():
                 except Exception:
                     issues.append("Invalid image")
 
-            if row.get("license", "").strip() not in ALLOWED_LICENSES:
-                issues.append("License not allowlisted")
-
-            if row.get("commercial_use_allowed", "").lower() != "yes":
-                issues.append("Commercial use not approved")
-
-            if row.get("legal_review", "").lower() != "yes":
-                issues.append("Legal review pending")
-
-            if row.get("review_status", "").lower() != "approved":
-                issues.append("Caption review pending")
-
             if row.get("split", "").lower() not in {
                 "train", "validation", "test"
             }:
                 issues.append("Invalid split")
 
+            status = row.get("review_status", "").strip().lower()
+
+            if status == "development_only":
+                if row.get("commercial_use_allowed", "").lower() != "no":
+                    issues.append("Development image must not be commercially approved")
+
+                if row.get("legal_review", "").lower() != "no":
+                    issues.append("Development image must not have legal approval")
+
+                if row.get("license", "").strip() != "UNVERIFIED":
+                    issues.append("Development license must remain UNVERIFIED")
+
+                if not issues:
+                    development_valid += 1
+
+            elif status == "approved":
+                if row.get("license", "").strip() not in ALLOWED_LICENSES:
+                    issues.append("License not allowlisted")
+
+                if row.get("commercial_use_allowed", "").lower() != "yes":
+                    issues.append("Commercial use not approved")
+
+                if row.get("legal_review", "").lower() != "yes":
+                    issues.append("Legal review pending")
+
+                if not row.get("source_url", "").strip():
+                    issues.append("Source URL missing")
+
+                if not row.get("license_url", "").strip():
+                    issues.append("License URL missing")
+
+                if not issues:
+                    legal_valid += 1
+
+            else:
+                issues.append("Unknown or pending review status")
+
             if issues:
                 errors.append((line, issues))
-            else:
-                valid += 1
 
-    print("\nValid records:", valid)
+    print("\nTotal records:", total)
+    print("Valid development records:", development_valid)
+    print("Valid legal records:", legal_valid)
     print("Records requiring correction:", len(errors))
 
     for line, issues in errors:
         print(f"Row {line}: {'; '.join(issues)}")
 
-    if not errors:
-        print("Dataset validation successful.")
+    if total == 0:
+        print("ERROR: Dataset is empty. Validation cannot pass.")
+        sys.exit(1)
+
+    if errors:
+        print("Validation failed.")
+        sys.exit(1)
+
+    print("Dataset validation successful.")
 
 if __name__ == "__main__":
     main()

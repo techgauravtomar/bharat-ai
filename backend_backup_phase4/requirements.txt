@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic-settings
+pillow
+numpy
+torch
+torchvision
+diffusers
+transformers
+accelerate
+safetensors
