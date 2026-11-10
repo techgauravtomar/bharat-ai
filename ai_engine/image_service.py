@@ -1,12 +1,16 @@
+
 import torch
 import threading
 import uuid
 
 from pathlib import Path
-from diffusers import StableDiffusionPipeline
+from diffusers import StableDiffusionPipeline, UNet2DConditionModel
+from peft import LoraConfig, set_peft_model_state_dict
+from safetensors.torch import load_file
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = ROOT / "storage" / "generated"
+LORA_DIR = ROOT / "storage" / "checkpoints" / "bharat_architecture_lora_v01"
 
 MODEL_ID = "stable-diffusion-v1-5/stable-diffusion-v1-5"
 
@@ -21,18 +25,58 @@ def load_pipeline():
         if not torch.backends.mps.is_available():
             raise RuntimeError("Apple MPS is not available.")
 
-        print("Loading Bharat AI model...")
+        if not (LORA_DIR / "adapter_model.safetensors").exists():
+            raise FileNotFoundError("Bharat AI LoRA adapter not found.")
 
-        _pipeline = StableDiffusionPipeline.from_pretrained(
+        print("Loading Bharat AI base model...")
+
+        pipe = StableDiffusionPipeline.from_pretrained(
             MODEL_ID,
             torch_dtype=torch.float16,
             use_safetensors=True
         )
 
-        _pipeline = _pipeline.to("mps")
-        _pipeline.enable_attention_slicing()
+        print("Attaching Bharat AI architecture LoRA...")
 
-        print("Bharat AI model loaded.")
+        pipe.unet.requires_grad_(False)
+
+        config = LoraConfig(
+            r=4,
+            lora_alpha=4,
+            init_lora_weights="gaussian",
+            target_modules=["to_q", "to_k", "to_v", "to_out.0"]
+        )
+
+        pipe.unet.add_adapter(config, adapter_name="bharat_architecture")
+
+        adapter_state = load_file(
+            str(LORA_DIR / "adapter_model.safetensors"),
+            device="cpu"
+        )
+
+        result = set_peft_model_state_dict(
+            pipe.unet,
+            adapter_state,
+            adapter_name="bharat_architecture"
+        )
+
+        unexpected = getattr(result, "unexpected_keys", [])
+        mismatched = getattr(result, "mismatched_keys", [])
+
+        if unexpected or mismatched:
+            raise RuntimeError(
+                f"LoRA loading mismatch. Unexpected: {unexpected}; "
+                f"Mismatched: {mismatched}"
+            )
+
+        pipe.unet.set_adapter("bharat_architecture")
+
+        pipe = pipe.to("mps")
+        pipe.enable_attention_slicing()
+
+        _pipeline = pipe
+
+        print("Bharat AI architecture LoRA loaded.")
 
     return _pipeline
 

@@ -21,12 +21,14 @@ ALLOWED_LICENSES = {
     "Direct Permission",
 }
 
+
 def calculate_hash(path):
     digest = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
 
 def main():
     if not CSV_FILE.exists():
@@ -39,8 +41,8 @@ def main():
     legal_valid = 0
     total = 0
 
-    with CSV_FILE.open(encoding="utf-8", newline="") as f:
-        reader = csv.DictReader(f)
+    with CSV_FILE.open(encoding="utf-8", newline="") as file:
+        reader = csv.DictReader(file)
 
         missing = set(REQUIRED) - set(reader.fieldnames or [])
         if missing:
@@ -52,10 +54,10 @@ def main():
             issues = []
 
             for field in REQUIRED:
-              if field in {"source_url", "license_url"}:
-               continue
-            if not (row.get(field) or "").strip():
-             issues.append(f"Missing {field}")
+                if field in {"source_url", "license_url"}:
+                    continue
+                if not (row.get(field) or "").strip():
+                    issues.append(f"Missing {field}")
 
             image_path = ROOT / (row.get("image_path") or "")
 
@@ -67,7 +69,7 @@ def main():
                         image.verify()
 
                     actual_hash = calculate_hash(image_path)
-                    recorded_hash = row.get("sha256", "").strip()
+                    recorded_hash = (row.get("sha256") or "").strip()
 
                     if actual_hash != recorded_hash:
                         issues.append("SHA256 mismatch")
@@ -80,12 +82,12 @@ def main():
                 except Exception:
                     issues.append("Invalid image")
 
-            if row.get("split", "").lower() not in {
+            if (row.get("split") or "").lower() not in {
                 "train", "validation", "test"
             }:
                 issues.append("Invalid split")
 
-            status = row.get("review_status", "").strip().lower()
+            status = (row.get("review_status") or "").strip().lower()
 
             if status == "development_only":
                 if row.get("commercial_use_allowed", "").lower() != "no":
@@ -134,7 +136,7 @@ def main():
         print(f"Row {line}: {'; '.join(issues)}")
 
     if total == 0:
-        print("ERROR: Dataset is empty. Validation cannot pass.")
+        print("ERROR: Dataset is empty.")
         sys.exit(1)
 
     if errors:
@@ -142,6 +144,7 @@ def main():
         sys.exit(1)
 
     print("Dataset validation successful.")
+
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,64 @@
+{
+  "project": "Bharat AI",
+  "project_version": "0.1.0",
+  "description": "Indian-focused AI image generation platform",
+  "versions": [
+    {
+      "version": "v0.1",
+      "name": "Bharat AI Architecture LoRA",
+      "status": "development",
+      "created": "2026-11-10",
+      "purpose": "Indian Temple Architecture image generation",
+      "base_model": "Stable Diffusion 1.5",
+      "training_method": "LoRA fine-tuning",
+      "dataset": {
+        "category": "Indian Temples",
+        "training_candidates": 32,
+        "resolution": "128x128"
+      },
+      "training": {
+        "steps": 32,
+        "lora_rank": 4,
+        "lora_alpha": 4,
+        "learning_rate": 1e-05,
+        "hardware": "MacBook Pro M1 / MPS",
+        "checkpoint": "storage/checkpoints/bharat_architecture_lora_v01"
+      },
+      "results": {
+        "training_completed": true,
+        "adapter_loaded": true,
+        "image_generation_tested": true,
+        "visual_improvement_proven": false
+      },
+      "release": {
+        "public_release_approved": false,
+        "license_review": "pending"
+      },
+      "notes": "First successful technical LoRA experiment."
+    },
+    {
+      "version": "v0.2",
+      "name": "Bharat AI All Indian Architecture",
+      "status": "planned",
+      "purpose": "Indian architecture across six categories",
+      "base_model": "Stable Diffusion 1.5",
+      "training_method": "LoRA fine-tuning",
+      "dataset": {
+        "target_images": 240,
+        "categories": {
+          "temples": 60,
+          "forts_palaces": 50,
+          "stepwells": 25,
+          "rock_cut_caves": 25,
+          "havelis_houses": 40,
+          "historic_buildings": 40
+        }
+      },
+      "release": {
+        "public_release_approved": false,
+        "license_review": "not_started"
+      },
+      "notes": "Planned version. Training has not started."
+    }
+  ]
+}
